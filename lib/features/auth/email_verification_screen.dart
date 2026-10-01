@@ -2,8 +2,9 @@ import 'package:facepix/core/preferences/auth_flow_preferences.dart';
 import 'package:facepix/core/theme/auth_colors.dart';
 import 'package:facepix/features/auth/create_account_screen.dart';
 import 'package:facepix/features/auth/widgets/auth_form_widgets.dart';
+import 'package:facepix/features/auth/widgets/auth_inline_link_text.dart';
+import 'package:facepix/features/auth/widgets/auth_resend_cooldown.dart';
 import 'package:facepix/features/shell/app_shell.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -18,19 +19,29 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  String _email = 'hello@facepix.ai';
+  static const _fallbackEmail = 'hello@facepix.ai';
+
+  late String _email;
+  late final AuthResendCooldown _cooldown;
+  bool _resent = false;
 
   @override
   void initState() {
     super.initState();
-    _loadEmail();
+    _email = widget.email ?? _fallbackEmail;
+    _cooldown = AuthResendCooldown(onTick: () {
+      if (mounted) setState(() {});
+    });
+    if (widget.email == null) _loadStoredEmail();
   }
 
-  Future<void> _loadEmail() async {
-    if (widget.email != null) {
-      setState(() => _email = widget.email!);
-      return;
-    }
+  @override
+  void dispose() {
+    _cooldown.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadStoredEmail() async {
     final stored = await AuthFlowPreferences.getSignupEmail();
     if (mounted) setState(() => _email = stored);
   }
@@ -41,6 +52,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => const AppShell()),
     );
+  }
+
+  /// Local-only for now: Firebase will send the real message. The point of
+  /// wiring it up is that the button no longer does nothing at all.
+  void _resend() {
+    setState(() => _resent = true);
+    _cooldown.start();
   }
 
   void _changeEmail() {
@@ -91,14 +109,20 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               const SizedBox(height: 24),
               EmailPill(email: _email),
               const SizedBox(height: 16),
-              Text(
-                "Didn't receive the email? Check your spam folder or try resending.",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  height: 16 / 12,
-                  color: AuthColors.subtitle,
+              Semantics(
+                liveRegion: _resent,
+                child: Text(
+                  _resent
+                      ? 'Verification email sent again to $_email.'
+                      : "Didn't receive the email? Check your spam folder or "
+                            'try resending.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    height: 16 / 12,
+                    color: AuthColors.subtitle,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -111,27 +135,23 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               const SizedBox(height: 16),
               SecondaryOutlinedButton(
-                label: 'Resend Verification Email',
-                onPressed: () {},
+                label: _cooldown.isActive
+                    ? 'Resend in ${_cooldown.secondsRemaining}s'
+                    : 'Resend Verification Email',
+                onPressed: _cooldown.isActive ? null : _resend,
               ),
               const SizedBox(height: 32),
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AuthColors.subtitle.withValues(alpha: 0.8),
-                  ),
-                  children: [
-                    const TextSpan(text: 'Wrong email? '),
-                    TextSpan(
-                      text: 'Change email address',
-                      style: const TextStyle(color: AuthColors.link),
-                      recognizer: TapGestureRecognizer()..onTap = _changeEmail,
-                    ),
-                  ],
+              AuthInlineLinkText(
+                spans: [
+                  const AuthLinkSpan('Wrong email? '),
+                  AuthLinkSpan.link('Change email address', _changeEmail),
+                ],
+                baseStyle: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AuthColors.subtitle.withValues(alpha: 0.8),
                 ),
+                linkStyle: const TextStyle(color: AuthColors.link),
               ),
               const SizedBox(height: 16),
               FooterLinkRow(

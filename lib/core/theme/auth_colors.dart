@@ -16,6 +16,11 @@ abstract final class AuthColors {
   static const link = Color(0xFF493EE5);
   static const loginLink = Color(0xFF635BFF);
 
+  /// Validation error text and field outline. Not in the Figma file — the
+  /// design has no error state — so this is Material's standard error red,
+  /// which clears 4.5:1 contrast on the white auth background.
+  static const error = Color(0xFFB3261E);
+
   static const emailPillBackground = Color(0xFFF3F4F5);
   static const emailPillBorder = Color(0x4DC7C4D8);
   static const footerPillBackground = Color(0xFFE3E3E4);
